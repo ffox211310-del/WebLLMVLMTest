@@ -1,128 +1,87 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>WebLLM Vision Demo</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>軽量 画像認識 - transformers.js</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 16px; }
-  #preview { max-width: 100%; max-height: 400px; margin-top: 12px; border-radius: 12px; display: none; }
-  #status { background: #f5f5f5; padding: 10px; border-radius: 8px; white-space: pre-wrap; font-size: 14px; }
-  #output { background: #111; color: #eee; padding: 14px; border-radius: 8px; min-height: 80px; white-space: pre-wrap; }
-  button { padding: 10px 16px; border-radius: 8px; border: none; background: #4f46e5; color: white; font-weight: 600; cursor: pointer; }
-  button:disabled { opacity: 0.5; }
-  input, select { margin: 8px 0; }
+ body{font-family:system-ui;max-width:720px;margin:24px auto;padding:16px}
+ #preview{max-width:100%;border-radius:12px;display:none;margin:12px 0}
+ #output{background:#111;color:#eee;padding:14px;border-radius:8px;white-space:pre-wrap}
+ button{padding:10px 16px;border-radius:8px;background:#4f46e5;color:#fff;border:none}
 </style>
 <script type="importmap">
 {
   "imports": {
-    "@mlc-ai/web-llm": "https://esm.run/@mlc-ai/web-llm@0.2.79"
+    "@huggingface/transformers": "https://esm.run/@huggingface/transformers@3.7.0"
   }
 }
 </script>
 </head>
 <body>
-<h2>WebLLMで画像認識 - ブラウザ内で完結</h2>
-<p>モデル: <select id="modelSelect">
-  <option value="Phi-3.5-vision-instruct-q4f16_1-MLC">Phi-3.5-vision (軽量・推奨 4GB)</option>
-  <option value="LLaVA-1.5-7B-q4f32_1-MLC">LLaVA-1.5-7B (高精度)</option>
-  <option value="Qwen2-VL-2B-Instruct-q4f16_1-MLC">Qwen2-VL-2B (最軽量)</option>
-</select></p>
-
-<div id="status">モデル未ロード。Chrome / Edge 最新版でWebGPUを有効にしてください。</div>
-<input type="file" id="fileInput" accept="image/*" />
-<img id="preview" />
-<br><br>
-<textarea id="prompt" rows="2" style="width:100%">この画像に何が写っているか、日本語で詳しく説明して。写っている物体をリストアップして。</textarea>
-<br><br>
-<button id="runBtn" disabled>画像を認識する</button>
-
-<h3>結果:</h3>
+<h3>画像認識 - 完全ブラウザ内 / 50MB</h3>
+<div id="status">モデル準備中...</div>
+<input type="file" id="file" accept="image/*">
+<img id="preview">
+<br>
+<button id="run" disabled>認識する</button>
 <div id="output"></div>
 
 <script type="module">
-import { CreateMLCEngine } from "@mlc-ai/web-llm";
+import { pipeline, env } from "@huggingface/transformers";
+// キャッシュ有効化
+env.allowLocalModels = false;
 
-const statusEl = document.getElementById("status");
-const fileInput = document.getElementById("fileInput");
-const previewEl = document.getElementById("preview");
-const runBtn = document.getElementById("runBtn");
-const outputEl = document.getElementById("output");
-const modelSelect = document.getElementById("modelSelect");
-const promptEl = document.getElementById("prompt");
+const status = document.getElementById('status');
+const fileInput = document.getElementById('file');
+const preview = document.getElementById('preview');
+const runBtn = document.getElementById('run');
+const output = document.getElementById('output');
 
-let engine = null;
-let imageDataUrl = null;
+let imageEl = null;
+let classifier, captioner;
 
-// WebGPUチェック
-if (!navigator.gpu) {
-  statusEl.textContent = "このブラウザはWebGPU非対応です。Chrome 113+ / Edge 113+ を使ってください。";
-}
+// 軽量モデル2つをロード
+// 1. 分類: MobileNetV2 (14MB) - 猫/犬/車などが1000ラベルで出る
+// 2. 説明文: vit-gpt2 (300MB) - 画像を文章で説明
+status.textContent = "モデルDL中...初回のみ300MB程度";
+classifier = await pipeline('image-classification', 'Xenova/mobilenet_v2_1.0_224', { device: 'webgpu', dtype: 'fp32' }).catch(async ()=> {
+  // webgpu非対応ならwasmにフォールバック
+  return await pipeline('image-classification', 'Xenova/mobilenet_v2_1.0_224');
+});
+captioner = await pipeline('image-to-text', 'Xenova/vit-gpt2-image-captioning', { device: 'webgpu' }).catch(async ()=>{
+  return await pipeline('image-to-text', 'Xenova/vit-gpt2-image-captioning');
+});
 
-async function initEngine() {
-  const model = modelSelect.value;
-  statusEl.textContent = `モデル ${model} をダウンロード中...初回は2-4GBで時間かかります`;
-  runBtn.disabled = true;
+status.textContent = "準備完了！画像を選んでください";
+runBtn.disabled = false;
 
-  engine = await CreateMLCEngine(model, {
-    initProgressCallback: (report) => {
-      statusEl.textContent = `${report.text}\n${Math.round(report.progress*100)}%`;
-    }
-  });
-  statusEl.textContent = `準備完了: ${model}`;
-  runBtn.disabled =!imageDataUrl;
-}
-
-modelSelect.addEventListener("change", initEngine);
-initEngine(); // 起動時にロード
-
-fileInput.addEventListener("change", async (e) => {
+fileInput.onchange = e => {
   const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    imageDataUrl = reader.result; // data:image/jpeg;base64,...
-    previewEl.src = imageDataUrl;
-    previewEl.style.display = "block";
-    if (engine) runBtn.disabled = false;
-  };
-  reader.readAsDataURL(file);
-});
+  if(!file) return;
+  const url = URL.createObjectURL(file);
+  preview.src = url;
+  preview.style.display = 'block';
+  imageEl = preview;
+};
 
-runBtn.addEventListener("click", async () => {
-  if (!engine ||!imageDataUrl) return;
+runBtn.onclick = async () => {
+  if(!imageEl) return;
   runBtn.disabled = true;
-  outputEl.textContent = "推論中...";
+  output.textContent = "推論中...";
 
-  try {
-    // WebLLMのVision APIは OpenAI互換。contentに image_url を入れる
-    const chunks = await engine.chat.completions.create({
-      stream: true,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: promptEl.value },
-            { type: "image_url", image_url: { url: imageDataUrl } }
-          ]
-        }
-      ],
-      max_tokens: 500,
-    });
+  const [labels, caption] = await Promise.all([
+    classifier(imageEl, { topk: 5 }),
+    captioner(imageEl)
+  ]);
 
-    let fullText = "";
-    for await (const chunk of chunks) {
-      const delta = chunk.choices[0]?.delta?.content?? "";
-      fullText += delta;
-      outputEl.textContent = fullText;
-    }
-  } catch (err) {
-    outputEl.textContent = "エラー: " + err.message;
-    console.error(err);
-  } finally {
-    runBtn.disabled = false;
-  }
-});
+  let text = `【キャプション】\n${caption[0].generated_text}\n\n【分類TOP5】\n`;
+  labels.forEach(l => {
+    text += `- ${l.label}: ${(l.score*100).toFixed(1)}%\n`;
+  });
+  output.textContent = text;
+  runBtn.disabled = false;
+};
 </script>
 </body>
 </html>
