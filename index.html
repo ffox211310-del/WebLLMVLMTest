@@ -1,532 +1,128 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-  <title>和英翻訳 | 音声入力対応</title>
-  <!-- フォントとアイコン -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: 'Zen Kaku Gothic New', 'Inter', sans-serif;
-      background: linear-gradient(135deg, #0b0b0f 0%, #1a0a1f 30%, #2d0a2d 60%, #4a144a 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 1.5rem;
-      margin: 0;
-      position: relative;
-    }
-
-    /* 背景のピンクと黒のグラデーションに動きのあるオーバーレイ */
-    body::before {
-      content: "";
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: radial-gradient(circle at 30% 40%, rgba(255, 105, 180, 0.25) 0%, rgba(0, 0, 0, 0.8) 80%),
-                  radial-gradient(circle at 70% 70%, rgba(255, 20, 147, 0.3) 0%, rgba(20, 0, 20, 0.9) 80%);
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    .container {
-      position: relative;
-      z-index: 2;
-      width: 100%;
-      max-width: 700px;
-      background: rgba(10, 5, 12, 0.75);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border: 1px solid rgba(255, 192, 203, 0.3);
-      border-radius: 2.5rem;
-      padding: 2rem 2rem 2.2rem;
-      box-shadow: 0 30px 50px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 105, 180, 0.3), 0 0 40px rgba(255, 20, 147, 0.4);
-      display: flex;
-      flex-direction: column;
-      gap: 1.8rem;
-      transition: all 0.2s ease;
-    }
-
-    h1 {
-      color: #ffe4f2;
-      font-weight: 600;
-      font-size: 2rem;
-      letter-spacing: 0.03em;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.2rem;
-      text-shadow: 0 0 12px #ff69b4;
-      border-left: 5px solid #ff69b4;
-      padding-left: 1.2rem;
-    }
-
-    .input-section {
-      display: flex;
-      flex-direction: column;
-      gap: 0.9rem;
-    }
-
-    .label-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .label-row span {
-      color: #f8c8e0;
-      font-weight: 500;
-      font-size: 0.95rem;
-      letter-spacing: 0.5px;
-      background: rgba(255, 105, 180, 0.15);
-      padding: 0.3rem 1rem;
-      border-radius: 2rem;
-      backdrop-filter: blur(5px);
-    }
-
-    .textbox-wrapper {
-      position: relative;
-      width: 100%;
-    }
-
-    textarea {
-      width: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      border: 2px solid #4a2a4a;
-      border-radius: 1.5rem;
-      padding: 1.2rem 1.2rem;
-      font-size: 1.1rem;
-      color: #f5e9f0;
-      font-family: 'Zen Kaku Gothic New', 'Inter', sans-serif;
-      resize: vertical;
-      min-height: 110px;
-      line-height: 1.6;
-      transition: all 0.25s ease;
-      backdrop-filter: blur(12px);
-      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5);
-    }
-
-    textarea:focus {
-      outline: none;
-      border-color: #ff69b4;
-      box-shadow: 0 0 18px #ff1493, 0 0 8px #ff69b4;
-    }
-
-    /* 水色に光るエフェクト（マイク使用時） */
-    .mic-active-glow textarea {
-      border-color: #00bfff !important;
-      box-shadow: 0 0 28px #00bfff, 0 0 12px #1e90ff, 0 0 40px rgba(0, 191, 255, 0.8) !important;
-      transition: 0.2s ease-in;
-    }
-
-    .button-group {
-      display: flex;
-      gap: 0.8rem;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .mic-btn {
-      background: rgba(30, 20, 30, 0.8);
-      border: 1.5px solid #ffb6c1;
-      color: #ffb6c1;
-      font-size: 1.5rem;
-      width: 3.2rem;
-      height: 3.2rem;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      backdrop-filter: blur(12px);
-      transition: all 0.25s;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
-    }
-
-    .mic-btn:hover {
-      background: #ff69b4;
-      color: #0a0a0a;
-      border-color: #ff69b4;
-      transform: scale(1.07);
-      box-shadow: 0 0 20px #ff69b4;
-    }
-
-    .mic-btn.recording {
-      background: #ff1493;
-      color: white;
-      border-color: #ffffff;
-      animation: pulse-mic 1.2s infinite;
-      box-shadow: 0 0 28px #ff1493;
-    }
-
-    @keyframes pulse-mic {
-      0% { box-shadow: 0 0 8px #ff69b4, 0 0 20px #ff1493; }
-      50% { box-shadow: 0 0 24px #ffb6c1, 0 0 40px #ff1493, 0 0 60px #ff69b4; }
-      100% { box-shadow: 0 0 8px #ff69b4, 0 0 20px #ff1493; }
-    }
-
-    .translate-btn {
-      background: #ff69b4;
-      border: none;
-      color: #0a0a0f;
-      font-weight: 700;
-      font-size: 1.1rem;
-      padding: 0.9rem 2rem;
-      border-radius: 2.5rem;
-      letter-spacing: 0.04em;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: linear-gradient(135deg, #ff8ec4, #ff1493);
-      box-shadow: 0 10px 22px rgba(255, 20, 147, 0.5);
-      border: 1px solid rgba(255,255,255,0.2);
-      cursor: pointer;
-      transition: 0.2s;
-      backdrop-filter: blur(8px);
-    }
-
-    .translate-btn:hover {
-      background: linear-gradient(135deg, #ffb6d9, #ff69b4);
-      box-shadow: 0 0 30px #ff1493;
-      transform: scale(1.02);
-      color: black;
-    }
-
-    .clear-btn {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 192, 203, 0.5);
-      color: #f8c8e0;
-      padding: 0.7rem 1.5rem;
-      border-radius: 2rem;
-      font-weight: 500;
-      backdrop-filter: blur(8px);
-      cursor: pointer;
-      transition: 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
-    }
-
-    .clear-btn:hover {
-      background: rgba(255, 105, 180, 0.25);
-      border-color: #ff69b4;
-      color: white;
-    }
-
-    .output-box {
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(16px);
-      border: 2px solid #b0306a;
-      border-radius: 1.5rem;
-      padding: 1.2rem 1.2rem;
-      min-height: 100px;
-      color: #ffe4f2;
-      font-size: 1.2rem;
-      font-weight: 500;
-      line-height: 1.6;
-      word-break: break-word;
-      box-shadow: inset 0 0 18px rgba(255, 20, 147, 0.2);
-      transition: 0.2s;
-      display: flex;
-      align-items: center;
-    }
-
-    .output-text {
-      width: 100%;
-      color: #fad4e6;
-    }
-
-    .status-indicator {
-      font-size: 0.85rem;
-      color: #b0a0b8;
-      margin-left: 0.5rem;
-    }
-
-    hr {
-      border: 0.5px solid rgba(255, 105, 180, 0.4);
-      margin: 0.2rem 0 0.8rem;
-    }
-
-    @media (max-width: 500px) {
-      .container {
-        padding: 1.8rem 1.2rem;
-      }
-      .button-group {
-        justify-content: center;
-      }
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WebLLM Vision Demo</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 16px; }
+  #preview { max-width: 100%; max-height: 400px; margin-top: 12px; border-radius: 12px; display: none; }
+  #status { background: #f5f5f5; padding: 10px; border-radius: 8px; white-space: pre-wrap; font-size: 14px; }
+  #output { background: #111; color: #eee; padding: 14px; border-radius: 8px; min-height: 80px; white-space: pre-wrap; }
+  button { padding: 10px 16px; border-radius: 8px; border: none; background: #4f46e5; color: white; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: 0.5; }
+  input, select { margin: 8px 0; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "@mlc-ai/web-llm": "https://esm.run/@mlc-ai/web-llm@0.2.79"
+  }
+}
+</script>
 </head>
 <body>
-  <div class="container">
-    <h1>
-      <i class="fas fa-language"></i> 日 → 英 翻訳
-    </h1>
-    
-    <!-- 原文エリア：上に配置 -->
-    <div class="input-section">
-      <div class="label-row">
-        <span><i class="fas fa-pen"></i> 日本語 (原文)</span>
-        <span class="status-indicator" id="mic-status">🎤 マイク待機</span>
-      </div>
-      <div class="textbox-wrapper" id="textboxWrapper">
-        <textarea id="sourceText" placeholder="ここに日本語を入力、またはマイクで話しかけてください..." autofocus></textarea>
-      </div>
-      
-      <div class="button-group">
-        <button class="mic-btn" id="micButton" title="音声入力（日本語）">
-          <i class="fas fa-microphone"></i>
-        </button>
-        <button class="translate-btn" id="translateButton">
-          <i class="fas fa-sync-alt"></i> 英語に翻訳
-        </button>
-        <button class="clear-btn" id="clearButton">
-          <i class="fas fa-eraser"></i> クリア
-        </button>
-      </div>
-    </div>
+<h2>WebLLMで画像認識 - ブラウザ内で完結</h2>
+<p>モデル: <select id="modelSelect">
+  <option value="Phi-3.5-vision-instruct-q4f16_1-MLC">Phi-3.5-vision (軽量・推奨 4GB)</option>
+  <option value="LLaVA-1.5-7B-q4f32_1-MLC">LLaVA-1.5-7B (高精度)</option>
+  <option value="Qwen2-VL-2B-Instruct-q4f16_1-MLC">Qwen2-VL-2B (最軽量)</option>
+</select></p>
 
-    <!-- 翻訳結果：下に配置 -->
-    <div style="margin-top: 0.3rem;">
-      <div class="label-row">
-        <span><i class="fas fa-globe"></i> 英語 (翻訳結果)</span>
-      </div>
-      <div class="output-box" id="outputBox">
-        <div class="output-text" id="translatedText">翻訳がここに表示されます</div>
-      </div>
-    </div>
-    <hr>
-    <div style="color: #b8a0b8; font-size: 0.8rem; text-align: right;">
-      <i class="fas fa-microchip"></i> マイク許可が必要です • 日本語→英語
-    </div>
-  </div>
+<div id="status">モデル未ロード。Chrome / Edge 最新版でWebGPUを有効にしてください。</div>
+<input type="file" id="fileInput" accept="image/*" />
+<img id="preview" />
+<br><br>
+<textarea id="prompt" rows="2" style="width:100%">この画像に何が写っているか、日本語で詳しく説明して。写っている物体をリストアップして。</textarea>
+<br><br>
+<button id="runBtn" disabled>画像を認識する</button>
 
-  <script>
-    (function() {
-      // DOM要素
-      const sourceTextarea = document.getElementById('sourceText');
-      const translateBtn = document.getElementById('translateButton');
-      const clearBtn = document.getElementById('clearButton');
-      const micBtn = document.getElementById('micButton');
-      const translatedDiv = document.getElementById('translatedText');
-      const textboxWrapper = document.getElementById('textboxWrapper');
-      const micStatus = document.getElementById('mic-status');
+<h3>結果:</h3>
+<div id="output"></div>
 
-      // 音声認識関連 (SpeechRecognition)
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      let recognition = null;
-      let isRecording = false;
+<script type="module">
+import { CreateMLCEngine } from "@mlc-ai/web-llm";
 
-      // 翻訳APIを使わないシンプルなデモ翻訳機能（実際にはMyMemory APIなど無料API使用可能）
-      // ここでは無料のMyMemory翻訳API (GET) を使用します。制限はありますが個人利用向け。
-      async function translateJapaneseToEnglish(text) {
-        if (!text.trim()) {
-          return '';
+const statusEl = document.getElementById("status");
+const fileInput = document.getElementById("fileInput");
+const previewEl = document.getElementById("preview");
+const runBtn = document.getElementById("runBtn");
+const outputEl = document.getElementById("output");
+const modelSelect = document.getElementById("modelSelect");
+const promptEl = document.getElementById("prompt");
+
+let engine = null;
+let imageDataUrl = null;
+
+// WebGPUチェック
+if (!navigator.gpu) {
+  statusEl.textContent = "このブラウザはWebGPU非対応です。Chrome 113+ / Edge 113+ を使ってください。";
+}
+
+async function initEngine() {
+  const model = modelSelect.value;
+  statusEl.textContent = `モデル ${model} をダウンロード中...初回は2-4GBで時間かかります`;
+  runBtn.disabled = true;
+
+  engine = await CreateMLCEngine(model, {
+    initProgressCallback: (report) => {
+      statusEl.textContent = `${report.text}\n${Math.round(report.progress*100)}%`;
+    }
+  });
+  statusEl.textContent = `準備完了: ${model}`;
+  runBtn.disabled =!imageDataUrl;
+}
+
+modelSelect.addEventListener("change", initEngine);
+initEngine(); // 起動時にロード
+
+fileInput.addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    imageDataUrl = reader.result; // data:image/jpeg;base64,...
+    previewEl.src = imageDataUrl;
+    previewEl.style.display = "block";
+    if (engine) runBtn.disabled = false;
+  };
+  reader.readAsDataURL(file);
+});
+
+runBtn.addEventListener("click", async () => {
+  if (!engine ||!imageDataUrl) return;
+  runBtn.disabled = true;
+  outputEl.textContent = "推論中...";
+
+  try {
+    // WebLLMのVision APIは OpenAI互換。contentに image_url を入れる
+    const chunks = await engine.chat.completions.create({
+      stream: true,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: promptEl.value },
+            { type: "image_url", image_url: { url: imageDataUrl } }
+          ]
         }
-        try {
-          // MyMemory API : 言語ペア ja|en  (日本語→英語)
-          const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=ja|en`;
-          const response = await fetch(url);
-          if (!response.ok) throw new Error('Network error');
-          const data = await response.json();
-          if (data && data.responseData && data.responseData.translatedText) {
-            return data.responseData.translatedText;
-          } else {
-            throw new Error('Invalid translation response');
-          }
-        } catch (error) {
-          console.warn('翻訳APIエラー:', error);
-          // フォールバック：簡易メッセージまたはエラー表示
-          return '[翻訳エラー] もう一度お試しください';
-        }
-      }
+      ],
+      max_tokens: 500,
+    });
 
-      // 翻訳実行 & UI更新
-      async function performTranslation() {
-        const source = sourceTextarea.value.trim();
-        if (source === '') {
-          translatedDiv.textContent = '（原文が空です）';
-          translatedDiv.style.opacity = '0.7';
-          return;
-        }
-        
-        // ローディング表示
-        translatedDiv.textContent = '翻訳中...';
-        translatedDiv.style.opacity = '0.8';
-        
-        const translated = await translateJapaneseToEnglish(source);
-        translatedDiv.textContent = translated || '（翻訳結果が得られませんでした）';
-        translatedDiv.style.opacity = '1';
-      }
-
-      // 音声認識の初期化
-      function initSpeechRecognition() {
-        if (!SpeechRecognition) {
-          micBtn.disabled = true;
-          micBtn.style.opacity = '0.5';
-          micStatus.textContent = '⚠️ 非対応ブラウザ';
-          alert('お使いのブラウザは音声認識に対応していません。Chrome推奨です。');
-          return false;
-        }
-
-        recognition = new SpeechRecognition();
-        recognition.lang = 'ja-JP';          // 日本語音声認識
-        recognition.interimResults = false;  // 最終結果のみ取得（途中表示しない）
-        recognition.continuous = false;      // 1回の発話で終了
-        
-        recognition.onstart = function() {
-          isRecording = true;
-          micBtn.classList.add('recording');
-          micBtn.querySelector('i').classList.remove('fa-microphone');
-          micBtn.querySelector('i').classList.add('fa-microphone-alt');
-          micStatus.textContent = '🔴 聞き取り中...';
-          // ★マイクボタン押下でテキストボックスの枠を水色に光らせる
-          textboxWrapper.classList.add('mic-active-glow');
-        };
-
-        recognition.onresult = function(event) {
-          const transcript = event.results[0][0].transcript;
-          // 現在のテキストエリアに追記（末尾に追加、または選択置換などシンプルに追加）
-          if (sourceTextarea.value.trim() === '') {
-            sourceTextarea.value = transcript;
-          } else {
-            // 末尾にスペース＋認識テキストを追加
-            sourceTextarea.value = sourceTextarea.value + ' ' + transcript;
-          }
-          // 入力後、自動翻訳を実行する（ご要望の「自動で英語化」に近い動作）
-          performTranslation();
-        };
-
-        recognition.onerror = function(event) {
-          console.error('音声認識エラー:', event.error);
-          let errorMsg = '音声エラー';
-          if (event.error === 'no-speech') {
-            errorMsg = '音声が検出されませんでした';
-          } else if (event.error === 'audio-capture') {
-            errorMsg = 'マイクが見つかりません';
-          } else if (event.error === 'not-allowed') {
-            errorMsg = 'マイク許可が拒否されました';
-          }
-          micStatus.textContent = '⚠️ ' + errorMsg;
-          stopRecordingState();
-        };
-
-        recognition.onend = function() {
-          // 認識終了（正常またはエラー後）
-          stopRecordingState();
-        };
-
-        return true;
-      }
-
-      function stopRecordingState() {
-        if (isRecording) {
-          isRecording = false;
-          micBtn.classList.remove('recording');
-          micBtn.querySelector('i').classList.remove('fa-microphone-alt');
-          micBtn.querySelector('i').classList.add('fa-microphone');
-          micStatus.textContent = '🎤 マイク待機';
-          // 水色グローを解除
-          textboxWrapper.classList.remove('mic-active-glow');
-        }
-        // recognitionがabortされることもあるが安全に
-        try {
-          if (recognition && recognition.abort) {
-            // recognition.abort();  // 既に停止してることが多いので注意
-          }
-        } catch (e) {}
-      }
-
-      function toggleMicrophone() {
-        if (!recognition) {
-          const initialized = initSpeechRecognition();
-          if (!initialized) return;
-        }
-
-        if (isRecording) {
-          // 停止
-          recognition.stop();
-          stopRecordingState();
-        } else {
-          // 開始前の状態リセット（もし前回エラーなど）
-          stopRecordingState(); // 安全のため一旦クリーン
-          try {
-            recognition.start();
-          } catch (error) {
-            console.warn('認識開始エラー', error);
-            // すでに開始中の場合があるので再初期化
-            stopRecordingState();
-            // 少し待ってから再試行
-            setTimeout(() => {
-              try {
-                if (recognition) recognition.start();
-              } catch (e) {
-                micStatus.textContent = '🔄 再試行してください';
-              }
-            }, 150);
-          }
-        }
-      }
-
-      // イベントリスナー設定
-      translateBtn.addEventListener('click', () => {
-        performTranslation();
-      });
-
-      clearBtn.addEventListener('click', () => {
-        sourceTextarea.value = '';
-        translatedDiv.textContent = '翻訳がここに表示されます';
-        translatedDiv.style.opacity = '0.9';
-        // マイクグロー解除（もしついていたら）
-        textboxWrapper.classList.remove('mic-active-glow');
-        // マイク停止中であれば特に何もしない
-        sourceTextarea.focus();
-      });
-
-      micBtn.addEventListener('click', toggleMicrophone);
-
-      // テキストエリアでEnterキーを押したときの簡易翻訳（Ctrl+Enter または Shift+Enterで実行も可）
-      sourceTextarea.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-          e.preventDefault();
-          performTranslation();
-        }
-      });
-
-      // 初回読み込み時に音声認識オブジェクトを準備（ブラウザチェック）
-      window.addEventListener('load', () => {
-        if (SpeechRecognition) {
-          initSpeechRecognition();
-        } else {
-          micBtn.disabled = true;
-          micBtn.style.opacity = '0.5';
-          micStatus.textContent = '❌ 非対応';
-        }
-        // フォーカス
-        sourceTextarea.focus();
-      });
-
-      // クリーンアップ（ページ離脱時など）
-      window.addEventListener('beforeunload', () => {
-        if (recognition && isRecording) {
-          recognition.stop();
-        }
-      });
-
-    })();
-  </script>
+    let fullText = "";
+    for await (const chunk of chunks) {
+      const delta = chunk.choices[0]?.delta?.content?? "";
+      fullText += delta;
+      outputEl.textContent = fullText;
+    }
+  } catch (err) {
+    outputEl.textContent = "エラー: " + err.message;
+    console.error(err);
+  } finally {
+    runBtn.disabled = false;
+  }
+});
+</script>
 </body>
 </html>
