@@ -3,83 +3,89 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>軽量 画像認識 - transformers.js</title>
+<title>wllama Vision Demo</title>
 <style>
- body{font-family:system-ui;max-width:720px;margin:24px auto;padding:16px}
- #preview{max-width:100%;border-radius:12px;display:none;margin:12px 0}
- #output{background:#111;color:#eee;padding:14px;border-radius:8px;white-space:pre-wrap}
- button{padding:10px 16px;border-radius:8px;background:#4f46e5;color:#fff;border:none}
+ body{font-family:system-ui;max-width:720px;margin:20px auto;padding:16px}
+ #preview{max-width:100%;border-radius:12px;display:none}
+ #log{background:#f5f5f5;padding:10px;border-radius:8px;white-space:pre-wrap;font-size:13px}
+ #out{background:#111;color:#eee;padding:14px;border-radius:8px;white-space:pre-wrap}
 </style>
-<script type="importmap">
-{
-  "imports": {
-    "@huggingface/transformers": "https://esm.run/@huggingface/transformers@3.7.0"
-  }
-}
-</script>
 </head>
 <body>
-<h3>画像認識 - 完全ブラウザ内 / 50MB</h3>
-<div id="status">モデル準備中...</div>
+<h3>wllamaで画像認識 - QwenVL系も動く</h3>
+<div id="log">初期化中...</div>
 <input type="file" id="file" accept="image/*">
-<img id="preview">
-<br>
-<button id="run" disabled>認識する</button>
-<div id="output"></div>
+<img id="preview"><br><br>
+<button id="run" disabled>画像を説明させる</button>
+<div id="out"></div>
 
 <script type="module">
-import { pipeline, env } from "@huggingface/transformers";
-// キャッシュ有効化
-env.allowLocalModels = false;
+import { Wllama } from "https://esm.run/@wllama/wllama@3.2.3";
 
-const status = document.getElementById('status');
+// wllama v3の初期化
+const wllama = new Wllama({
+  // wasmファイルのCDNを指定
+  "single-thread/wllama.wasm": "https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/esm/single-thread/wllama.wasm",
+  "multi-thread/wllama.wasm": "https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/esm/multi-thread/wllama.wasm",
+});
+
+const logEl = document.getElementById('log');
+const outEl = document.getElementById('out');
 const fileInput = document.getElementById('file');
 const preview = document.getElementById('preview');
 const runBtn = document.getElementById('run');
-const output = document.getElementById('output');
 
-let imageEl = null;
-let classifier, captioner;
+let imageBuffer = null;
 
-// 軽量モデル2つをロード
-// 1. 分類: MobileNetV2 (14MB) - 猫/犬/車などが1000ラベルで出る
-// 2. 説明文: vit-gpt2 (300MB) - 画像を文章で説明
-status.textContent = "モデルDL中...初回のみ300MB程度";
-classifier = await pipeline('image-classification', 'Xenova/mobilenet_v2_1.0_224', { device: 'webgpu', dtype: 'fp32' }).catch(async ()=> {
-  // webgpu非対応ならwasmにフォールバック
-  return await pipeline('image-classification', 'Xenova/mobilenet_v2_1.0_224');
-});
-captioner = await pipeline('image-to-text', 'Xenova/vit-gpt2-image-captioning', { device: 'webgpu' }).catch(async ()=>{
-  return await pipeline('image-to-text', 'Xenova/vit-gpt2-image-captioning');
+// モデルロード - ここが肝
+// BakLLaVAは昔からwllamaの定番: model + mmprojの2ファイル構成
+// 【6501941348220943316†L5-L8】の構成と同じ
+logEl.textContent = "モデルDL中...初回1.5GB程度、キャッシュされます";
+await wllama.loadModelFromHF({
+  repo: 'mys/ggml_bakllava-1', // BakLLaVA 7BのGGUFリポジトリ
+  quant: 'Q4_K', // メインモデル
+  mmprojQuant: 'F16', // vision projector
+  // n_ctxは小さめにするとメモリ節約
+  n_ctx: 2048,
 });
 
-status.textContent = "準備完了！画像を選んでください";
+logEl.textContent = "準備完了！画像を選んで";
 runBtn.disabled = false;
 
-fileInput.onchange = e => {
+// Moondream2やQwen2-VLを使いたい場合はrepoを変えるだけでOK
+// 例: await wllama.loadModelFromHF({ repo: 'vikhyatk/moondream2-gguf', quant: 'Q4_K_M', mmprojQuant: 'F16' })
+
+fileInput.onchange = async e => {
   const file = e.target.files[0];
   if(!file) return;
-  const url = URL.createObjectURL(file);
-  preview.src = url;
+  preview.src = URL.createObjectURL(file);
   preview.style.display = 'block';
-  imageEl = preview;
+  imageBuffer = await file.arrayBuffer(); // wllamaはArrayBufferで渡す【5041994425468081545†L255-L258】
 };
 
 runBtn.onclick = async () => {
-  if(!imageEl) return;
+  if(!imageBuffer) return;
   runBtn.disabled = true;
-  output.textContent = "推論中...";
+  outEl.textContent = "推論中...画像エンコードに20-40秒かかります (CPUのため)";
 
-  const [labels, caption] = await Promise.all([
-    classifier(imageEl, { topk: 5 }),
-    captioner(imageEl)
-  ]);
-
-  let text = `【キャプション】\n${caption[0].generated_text}\n\n【分類TOP5】\n`;
-  labels.forEach(l => {
-    text += `- ${l.label}: ${(l.score*100).toFixed(1)}%\n`;
+  // OpenAI互換APIで画像を渡す【5041994425468081545†L260-L274】
+  const stream = await wllama.createChatCompletion({
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', data: imageBuffer },
+        { type: 'text', text: 'この画像を日本語で詳しく説明して。何が写ってる？' }
+      ]
+    }],
+    max_tokens: 512,
+    stream: true,
   });
-  output.textContent = text;
+
+  let full = "";
+  for await (const chunk of stream) {
+    full += chunk.choices[0]?.delta?.content?? "";
+    outEl.textContent = full;
+  }
   runBtn.disabled = false;
 };
 </script>
